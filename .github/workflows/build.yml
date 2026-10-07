@@ -3,13 +3,11 @@ name: Build Android APK
 on:
   push:
     branches: [ "main", "master" ]
-  pull_request:
-    branches: [ "main", "master" ]
-  workflow_dispatch: # Memungkinkan build manual dari tab Actions
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Checkout Repository
@@ -20,13 +18,22 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
+
+    # LANGKAH KUNCI: Paksa menggunakan Gradle 8.2
+    - name: Setup Gradle 8.2
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '8.2'
 
     - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+      run: chmod +x ./gradlew
 
+    - name: Verify Gradle Version
+      run: gradle --version
+
+    # Gunakan perintah 'gradle' langsung, bukan './gradlew'
     - name: Build Debug APK
-      run: ./gradlew assembleDebug
+      run: gradle assembleDebug --no-daemon --stacktrace
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
