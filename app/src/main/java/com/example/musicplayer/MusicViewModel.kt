@@ -19,7 +19,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentSongTitle = MutableStateFlow("No Song Selected")
     val currentSongTitle: StateFlow<String> = _currentSongTitle
 
-    // Audio Effects
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
     private var virtualizer: Virtualizer? = null
@@ -29,12 +28,49 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _waveformData = MutableStateFlow<ByteArray?>(null)
     val waveformData: StateFlow<ByteArray?> = _waveformData
 
-    fun loadLocalAudio(uri: Uri, fileName: String) {
-        val mediaItem = MediaItem.fromUri(uri)
+    init {
+        // Listener untuk update judul lagu saat lagu berubah
+        exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                mediaItem?.mediaMetadata?.title?.let {
+                    _currentSongTitle.value = it.toString()
+                }
+            }
+        })
+    }
+
+    fun playSong(song: Song) {
+        val mediaItem = MediaItem.Builder()
+            .setUri(song.uri)
+            .setMediaMetadata(
+                androidx.media3.common.MediaMetadata.Builder()
+                    .setTitle(song.title)
+                    .setArtist(song.artist)
+                    .build()
+            )
+            .build()
         exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
-        _currentSongTitle.value = fileName
+        _currentSongTitle.value = song.title
+        setupAudioEffects()
+    }
+
+    fun playAllSongs(songs: List<Song>, startIndex: Int = 0) {
+        val mediaItems = songs.map { song ->
+            MediaItem.Builder()
+                .setUri(song.uri)
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(song.title)
+                        .setArtist(song.artist)
+                        .build()
+                )
+                .build()
+        }
+        exoPlayer.setMediaItems(mediaItems, startIndex, 0L)
+        exoPlayer.prepare()
+        exoPlayer.playWhenReady = true
         setupAudioEffects()
     }
 
@@ -43,26 +79,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val sessionId = exoPlayer.audioSessionId
             if (sessionId == 0 || sessionId == android.media.audiofx.AudioEffect.ERROR) return
 
-            // Release yang lama
             equalizer?.release()
             bassBoost?.release()
             virtualizer?.release()
             loudnessEnhancer?.release()
             visualizer?.release()
 
-            // 1. Equalizer
             equalizer = Equalizer(0, sessionId).apply { enabled = true }
-
-            // 2. Bass Boost (Default: Mati)
             bassBoost = BassBoost(0, sessionId).apply { enabled = false }
-
-            // 3. Virtualizer (Efek Suara Luas, Default: Mati)
             virtualizer = Virtualizer(0, sessionId).apply { enabled = false }
-
-            // 4. Loudness Enhancer (Default: Mati)
             loudnessEnhancer = LoudnessEnhancer(sessionId).apply { enabled = false }
 
-            // 5. Visualizer
             visualizer = Visualizer(sessionId).apply {
                 captureSize = Visualizer.getCaptureSizeRange()[1]
                 setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
@@ -82,32 +109,24 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         equalizer?.setBandLevel(band, level)
     }
 
-    // Fungsi kontrol efek suara
     fun setBassBoost(enabled: Boolean) {
         bassBoost?.let {
             it.enabled = enabled
-            if (enabled) {
-                // Set ke kekuatan maksimum yang didukung hardware
-                it.setStrength(it.strengthSupported.max().toShort())
-            }
+            if (enabled) it.setStrength(it.strengthSupported.max().toShort())
         }
     }
 
     fun setVirtualizer(enabled: Boolean) {
         virtualizer?.let {
             it.enabled = enabled
-            if (enabled) {
-                it.setStrength(it.strengthSupported.max().toShort())
-            }
+            if (enabled) it.setStrength(it.strengthSupported.max().toShort())
         }
     }
 
     fun setLoudness(enabled: Boolean) {
         loudnessEnhancer?.let {
             it.enabled = enabled
-            if (enabled) {
-                it.setTargetGain(500) // 500 mB = +5 dB
-            }
+            if (enabled) it.setTargetGain(500)
         }
     }
 
