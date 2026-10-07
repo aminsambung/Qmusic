@@ -1,46 +1,76 @@
 package com.example.musicplayer.ui
 
-import android.content.Context
-import android.net.Uri
-import android.provider.OpenableColumns
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.example.musicplayer.MusicViewModel
+import com.example.musicplayer.Song
+import com.example.musicplayer.formatDuration
+import com.example.musicplayer.getAllSongs
 
 @Composable
 fun HomeScreen(navController: NavController, viewModel: MusicViewModel) {
     val backgroundColor = Color(0xFF0F0F0F)
     val textColor = Color.White
+    val accentColor = Color(0xFFFF5722)
     val context = LocalContext.current
 
-    // Launcher untuk memilih file audio dari penyimpanan HP (Offline)
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Ambil nama file dari URI
-            val fileName = getFileNameFromUri(context, it)
-            // Load ke ExoPlayer melalui ViewModel
-            viewModel.loadLocalAudio(it, fileName)
-            // Pindah ke layar Player
-            navController.navigate("player")
+    var songs by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var hasPermission by remember { mutableStateOf(false) }
+
+    val currentTitle by viewModel.currentSongTitle.collectAsState()
+    val isPlaying = viewModel.exoPlayer.isPlaying
+
+    // Fungsi memuat lagu
+    fun loadSongs() {
+        songs = getAllSongs(context)
+        hasPermission = true
+    }
+
+    // Launcher izin
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) loadSongs()
+    }
+
+    // Minta izin saat pertama dibuka
+    LaunchedEffect(Unit) {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
+            loadSongs()
+        } else {
+            permissionLauncher.launch(permission)
         }
     }
 
@@ -48,141 +78,199 @@ fun HomeScreen(navController: NavController, viewModel: MusicViewModel) {
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor)
-            .padding(24.dp)
     ) {
-        // Header
-        Text(
-            text = "Offline Music Player",
-            color = textColor,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Putar musik dari penyimpanan HP Anda",
-            color = Color.Gray,
-            fontSize = 14.sp
-        )
-
-        Spacer(modifier = Modifier.height(40.dp))
-
-        // Tombol Utama: Pilih Lagu
-        Button(
-            onClick = {
-                // Membuka file picker khusus audio (MP3, WAV, dll)
-                filePickerLauncher.launch(arrayOf("audio/*"))
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.FolderOpen,
-                contentDescription = "Pilih Lagu",
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
+        // --- Header ---
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Pilih Lagu dari HP",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.SemiBold
+                text = "Pustaka Musik",
+                color = textColor,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "${songs.size} lagu ditemukan",
+                color = Color.Gray,
+                fontSize = 13.sp
             )
         }
 
-        Spacer(modifier = Modifier.height(40.dp))
-
-        // Menu Cepat
-        Text(
-            text = "Menu Cepat",
-            color = textColor,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Item History (Dummy)
-            CategoryItem(
-                icon = Icons.Default.History,
-                label = "History"
-            ) { /* Aksi untuk history */ }
-
-            // Item Favorites (Dummy)
-            CategoryItem(
-                icon = Icons.Default.Favorite,
-                label = "Favorites"
-            ) { /* Aksi untuk favorites */ }
-
-            // Item Shuffle (Dummy)
-            CategoryItem(
-                icon = Icons.Default.Shuffle,
-                label = "Shuffle"
-            ) { /* Aksi untuk shuffle */ }
-
-            // Item Equalizer (Navigasi ke layar Equalizer)
-            CategoryItem(
-                icon = Icons.Default.Settings,
-                label = "Equalizer"
+        // --- Tombol Acak Semua ---
+        if (songs.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        viewModel.playAllSongs(songs.shuffled(), 0)
+                        navController.navigate("player")
+                    }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                navController.navigate("equalizer")
+                Icon(
+                    Icons.Default.Shuffle,
+                    contentDescription = "Shuffle",
+                    tint = accentColor,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    "ACAK SEMUA",
+                    color = accentColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
+            Divider(color = Color(0xFF1E1E1E), thickness = 1.dp)
+        }
+
+        // --- Daftar Lagu ---
+        if (!hasPermission) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "Izin akses musik diperlukan.\nSilakan izinkan di pengaturan.",
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else if (songs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(64.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Tidak ada lagu ditemukan.\nPastikan ada file MP3 di HP Anda.",
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .weight(1f),
+                contentPadding = PaddingValues(bottom = 80.dp) // Ruang untuk mini player
+            ) {
+                items(songs) { song ->
+                    SongRow(song) {
+                        viewModel.playAllSongs(songs, songs.indexOf(song))
+                        navController.navigate("player")
+                    }
+                }
+            }
+        }
+
+        // --- Mini Player (Muncul jika ada lagu yang sedang diputar) ---
+        if (currentTitle != "No Song Selected") {
+            MiniPlayer(
+                title = currentTitle,
+                isPlaying = isPlaying,
+                onPlayPauseClick = {
+                    if (isPlaying) viewModel.exoPlayer.pause() else viewModel.exoPlayer.play()
+                },
+                onNextClick = { viewModel.exoPlayer.seekToNext() },
+                onClick = { navController.navigate("player") }
+            )
         }
     }
 }
 
 @Composable
-fun CategoryItem(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+fun SongRow(song: Song, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
+            .fillMaxWidth()
             .clickable { onClick() }
-            .padding(8.dp)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(64.dp)
-                .background(Color(0xFF1E1E1E), shape = RoundedCornerShape(20.dp)),
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF1E1E1E)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = Color.White,
-                modifier = Modifier.size(28.dp)
+            Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.Gray)
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                song.title,
+                color = Color.White,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "${song.artist} • ${formatDuration(song.duration)}",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = label,
-            color = Color.Gray,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = null,
+            tint = Color.Gray,
+            modifier = Modifier.size(20.dp)
         )
     }
 }
 
-// Fungsi Helper untuk mendapatkan nama file dari URI penyimpanan
-fun getFileNameFromUri(context: Context, uri: Uri): String {
-    var fileName = "Lagu Tidak Dikenal"
-    val cursor = context.contentResolver.query(uri, null, null, null, null)
-    cursor?.use {
-        if (it.moveToFirst()) {
-            val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (nameIndex != -1) {
-                fileName = it.getString(nameIndex)
+@Composable
+fun MiniPlayer(
+    title: String,
+    isPlaying: Boolean,
+    onPlayPauseClick: () -> Unit,
+    onNextClick: () -> Unit,
+    onClick: () -> Unit
+) {
+    Surface(
+        color = Color(0xFF1E1E1E),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFFF5722)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.MusicNote, contentDescription = null, tint = Color.White)
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text("Sedang diputar...", color = Color.Gray, fontSize = 11.sp)
+            }
+            IconButton(onClick = onPlayPauseClick) {
+                Icon(
+                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    contentDescription = "Play/Pause",
+                    tint = Color.White
+                )
+            }
+            IconButton(onClick = onNextClick) {
+                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White)
             }
         }
     }
-    return fileName
 }
