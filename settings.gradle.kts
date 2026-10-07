@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "MusicPlayerApp"
-include(":app")
+include(":app")  // <-- INI SANGAT PENTING
