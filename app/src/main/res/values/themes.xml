@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema Utama Aplikasi -->
+    <style name="Theme.Material3.Dark.NoActionBar" parent="android:Theme.Material.NoActionBar">
+        <!-- Warna Latar Belakang Utama (True Black) -->
+        <item name="android:windowBackground">@android:color/black</item>
+        
+        <!-- Warna Status Bar (Transparan agar menyatu dengan UI Compose) -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        
+        <!-- Warna Navigation Bar (Transparan) -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        
+        <!-- Ikon Status Bar Berwarna Terang (Putih) karena background gelap -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        
+        <!-- Mengizinkan gambar di bawah status bar (Edge-to-Edge) -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowTranslucentStatus">false</item>
+        
+        <!-- Warna Aksen Default (Oranye sesuai desain) -->
+        <item name="android:colorAccent">#FFFF5722</item>
+        
+        <!-- Font default -->
+        <item name="android:fontFamily">sans-serif</item>
+    </style>
+</resources>
