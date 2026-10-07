@@ -59,7 +59,7 @@ fun EqualizerScreen(navController: NavController, viewModel: MusicViewModel) {
                         onValueChange = { newValue ->
                             bandLevels[index] = newValue
                             // Kirim ke ViewModel (konversi ke short)
-                            viewModel.setEqualizerBandLevel(index.toShort(), (newValue * 100).toShort())
+                            viewModel.setEqualizerBandLevel(index.toShort(), (newValue * 100).toInt().toShort())
                         },
                         valueRange = -15f..15f, // Range typical equalizer
                         modifier = Modifier.width(40.dp),
