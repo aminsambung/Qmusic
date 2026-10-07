@@ -5,7 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch:
+  workflow_dispatch: # Memungkinkan build manual dari tab Actions
 
 jobs:
   build:
@@ -20,20 +20,13 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-
-    - name: Setup Gradle 8.2 (Explicit)
-      uses: gradle/actions/setup-gradle@v3
-      with:
-        gradle-version: '8.2'
+        cache: gradle
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Verify Gradle Version
-      run: gradle --version
-
-    - name: Build Debug APK with Gradle 8.2
-      run: gradle assembleDebug --no-daemon --stacktrace
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
