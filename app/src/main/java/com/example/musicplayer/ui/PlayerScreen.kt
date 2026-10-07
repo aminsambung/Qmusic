@@ -24,31 +24,29 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.example.musicplayer.MusicViewModel
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 
 @Composable
 fun PlayerScreen(navController: NavController, viewModel: MusicViewModel) {
     val backgroundColor = Color(0xFF0F0F0F)
-    val accentColor = Color(0xFFFF5722)
+    val accentColor = Color(0xFFFF5722) // Oranye untuk visualizer saja
     val textColor = Color.White
     val context = LocalContext.current
 
     val waveformData by viewModel.waveformData.collectAsState()
     val songTitle by viewModel.currentSongTitle.collectAsState()
+
+    var currentPosition by remember { mutableStateOf(0L) }
+    var totalDuration by remember { mutableStateOf(0L) }
     var isPlaying by remember { mutableStateOf(viewModel.exoPlayer.isPlaying) }
 
-    // Minta izin RECORD_AUDIO (wajib untuk Visualizer)
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            // Jika diizinkan, panggil ulang setup visualizer
-            // (Di aplikasi nyata, sebaiknya panggil fungsi setup di ViewModel)
-        }
-    }
+    ) { }
 
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) 
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -59,9 +57,24 @@ fun PlayerScreen(navController: NavController, viewModel: MusicViewModel) {
             override fun onIsPlayingChanged(isPlayingNow: Boolean) {
                 isPlaying = isPlayingNow
             }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_READY) {
+                    totalDuration = viewModel.exoPlayer.duration.coerceAtLeast(0L)
+                }
+            }
         }
         viewModel.exoPlayer.addListener(listener)
         onDispose { viewModel.exoPlayer.removeListener(listener) }
+    }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentPosition = viewModel.exoPlayer.currentPosition
+            if (totalDuration == 0L) {
+                totalDuration = viewModel.exoPlayer.duration.coerceAtLeast(0L)
+            }
+            delay(500)
+        }
     }
 
     Column(
@@ -87,7 +100,7 @@ fun PlayerScreen(navController: NavController, viewModel: MusicViewModel) {
                 .background(Color(0xFF1E1E1E), shape = CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Headphones, contentDescription = null, tint = accentColor, modifier = Modifier.size(120.dp))
+            Icon(Icons.Default.Headphones, contentDescription = null, tint = textColor, modifier = Modifier.size(120.dp))
         }
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -98,12 +111,11 @@ fun PlayerScreen(navController: NavController, viewModel: MusicViewModel) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Visualizer
+        // Visualizer (tetap oranye)
         Box(modifier = Modifier.fillMaxWidth().height(70.dp)) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val data = waveformData
                 if (data != null && data.isNotEmpty()) {
-                    // Ambil hanya 60 data pertama agar tidak terlalu padat
                     val displayData = data.take(60)
                     val barWidth = size.width / displayData.size
                     for (i in displayData.indices) {
@@ -119,38 +131,77 @@ fun PlayerScreen(navController: NavController, viewModel: MusicViewModel) {
                         )
                     }
                 } else {
-                    // Garis statis jika tidak ada data
                     drawLine(Color.DarkGray, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 4f)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Progress Bar (Placeholder)
-        Slider(
-            value = 0.45f, onValueChange = {},
-            colors = SliderDefaults.colors(thumbColor = accentColor, activeTrackColor = accentColor, inactiveTrackColor = Color(0xFF2A2A2A))
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("0:00", color = Color.Gray, fontSize = 12.sp)
-            Text("--:--", color = Color.Gray, fontSize = 12.sp)
-        }
-
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Kontrol
+        // Slider Progress Bar
+        Slider(
+            value = if (totalDuration > 0) currentPosition.toFloat() / totalDuration.toFloat() else 0f,
+            onValueChange = { newValue ->
+                val newPosition = (newValue * totalDuration).toLong()
+                viewModel.exoPlayer.seekTo(newPosition)
+                currentPosition = newPosition
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = Color.White,        // Thumb putih
+                activeTrackColor = Color.White,  // Track aktif putih
+                inactiveTrackColor = Color(0xFF2A2A2A)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatTime(currentPosition), color = Color.Gray, fontSize = 12.sp)
+            Text(formatTime(totalDuration), color = Color.Gray, fontSize = 12.sp)
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Kontrol Pemutar - SEMUA PUTIH
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { }) { Icon(Icons.Default.Shuffle, "Shuffle", tint = textColor) }
-            IconButton(onClick = { viewModel.exoPlayer.seekToPrevious() }) { Icon(Icons.Default.SkipPrevious, "Prev", tint = textColor, modifier = Modifier.size(40.dp)) }
+            IconButton(onClick = {
+                viewModel.exoPlayer.shuffleModeEnabled = !viewModel.exoPlayer.shuffleModeEnabled
+            }) {
+                Icon(Icons.Default.Shuffle, "Shuffle", tint = Color.White)
+            }
+            IconButton(onClick = { viewModel.exoPlayer.seekToPrevious() }) {
+                Icon(Icons.Default.SkipPrevious, "Prev", tint = Color.White, modifier = Modifier.size(40.dp))
+            }
+            
+            // Tombol Play/Pause Utama: PUTIH dengan ikon HITAM
             IconButton(
                 onClick = { if (isPlaying) viewModel.exoPlayer.pause() else viewModel.exoPlayer.play() },
-                modifier = Modifier.size(80.dp).background(accentColor, CircleShape)
+                modifier = Modifier.size(80.dp).background(Color.White, CircleShape)
             ) {
-                Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, "Play/Pause", tint = Color.White, modifier = Modifier.size(48.dp))
+                Icon(
+                    if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    "Play/Pause", tint = Color.Black, modifier = Modifier.size(48.dp)
+                )
             }
-            IconButton(onClick = { viewModel.exoPlayer.seekToNext() }) { Icon(Icons.Default.SkipNext, "Next", tint = textColor, modifier = Modifier.size(40.dp)) }
-            IconButton(onClick = { }) { Icon(Icons.Default.Repeat, "Repeat", tint = textColor) }
+            
+            IconButton(onClick = { viewModel.exoPlayer.seekToNext() }) {
+                Icon(Icons.Default.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(40.dp))
+            }
+            IconButton(onClick = {
+                viewModel.exoPlayer.repeatMode = when (viewModel.exoPlayer.repeatMode) {
+                    androidx.media3.common.Player.REPEAT_MODE_OFF -> androidx.media3.common.Player.REPEAT_MODE_ALL
+                    androidx.media3.common.Player.REPEAT_MODE_ALL -> androidx.media3.common.Player.REPEAT_MODE_ONE
+                    else -> androidx.media3.common.Player.REPEAT_MODE_OFF
+                }
+            }) {
+                Icon(Icons.Default.Repeat, "Repeat", tint = Color.White)
+            }
         }
     }
+}
+
+fun formatTime(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return "%d:%02d".format(minutes, seconds)
 }
